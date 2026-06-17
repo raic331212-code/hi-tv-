@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="pt-BR" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HI TV IPTV</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { netflix: '#E50914', dark: '#141414', darkGray: '#181818', hoverGray: '#2A2A2A' },
+          animation: { 'fade-in': 'fadeIn 0.4s ease-out' },
+          keyframes: { fadeIn: { '0%': { opacity: '0' }, '100%': { opacity: '1' } } }
+        }
+      }
+    }
+  </script>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.6/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+  
+  <style>
+    body { -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none; margin: 0; padding: 0; background-color: #141414; color: white; font-family: 'Segoe UI', Roboto, sans-serif;}
+    ::-webkit-scrollbar { width: 0px; height: 0px; }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .glass-panel { background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(15px); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // --- DICIONÁRIO DE IDIOMAS ---
+    const i18n = {
+      pt: {
+        home: "Início", movies: "Filmes", series: "Séries", livetv: "TV Ao Vivo", settings: "Configurações",
+        search: "Buscar...", all: "Todos", favs: "Favoritos", recents: "Recentes",
+        login_title: "Importar Lista", login_m3u: "Lista M3U", login_xtream: "Conta Xtream",
+        url_placeholder: "Cole a URL M3U aqui...", epg_placeholder: "URL do EPG (Opcional)...",
+        btn_enter: "Entrar via Link", btn_test: "Modo Teste (Ver Interface)",
+        watch_now: "Assistir Agora", continue_watching: "Continuar Assistindo",
+        similar: "Títulos Semelhantes", episodes: "Episódios / Temporada",
+        set_general: "Geral", set_parental: "Controle Parental", set_data: "Dados da Conta",
+        lang: "Idioma do App", player_engine: "Motor do Player", player_hls: "Principal (HLS - Recomendado)", player_native: "Nativo (Alternativo)",
+        pin_setup: "Configurar PIN (+18)", pin_active: "PIN Ativado", pin_btn: "Definir/Alterar PIN", pin_remove: "Remover PIN",
+        update_list: "Atualizar Lista", restart_list: "Reiniciar App (Sair)",
+        pin_prompt: "Digite o PIN para acessar",
+        adult_warning: "Conteúdo Protegido", cancel: "Cancelar", confirm: "Confirmar"
+      }
+    };
+
+    const Icons = {
+      Home: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path></svg>,
+      Film: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"></path></svg>,
+      Tv: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>,
+      Search: () => <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>,
+      Settings: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>,
+      Play: () => <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"></path></svg>,
+      Pause: () => <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"></path></svg>,
+      Back: () => <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>,
+      SkipBack: () => <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"></path></svg>,
+      SkipFwd: () => <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z"></path></svg>,
+      List: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>,
+      Lock: () => <svg className="w-12 h-12 text-netflix" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+    };
+
+    const Toast = ({ msg }) => msg ? <div className="fixed top-4 right-4 bg-netflix text-white px-6 py-3 rounded shadow-2xl z-[100] font-bold animate-fade-in">{msg}</div> : null;
+
+    const isAdultCategory = (groupName) => {
+      if(!groupName) return false;
+      return /(adult|xxx|18\+|porn|sexy|erotic)/i.test(groupName);
+    };
+
+    // --- REPRODUTOR DE VÍDEO ---
+    const SmartPlayer = ({ media, playlist, isVod, onClose, saveProgress, startAt, playerEngine, t }) => {
+      const videoRef = useRef(null);
+      const [isPlaying, setIsPlaying] = useState(true);
+      const [showUI, setShowUI] = useState(true);
+      const [speedIndicator, setSpeedIndicator] = useState(false);
+      const [showEpisodes, setShowEpisodes] = useState(false);
+      
+      const uiTimeout = useRef(null);
+      const progressInterval = useRef(null);
+      const episodes = isVod && media.type === 'Série' ? playlist.filter(i => i.group === media.group) : [];
+
+      const resetUITimer = () => {
+        setShowUI(true);
+        clearTimeout(uiTimeout.current);
+        uiTimeout.current = setTimeout(() => setShowUI(false), 4000);
+      };
+
+      useEffect(() => {
+        if (!media) return;
+        let url = media.url;
+        if (!url.includes('output=')) url += '&output=ts';
+        
+        const video = videoRef.current;
+        let hlsInstance = null;
+
+        if (playerEngine === 'hls' && Hls.isSupported()) {
+          hlsInstance = new Hls({ maxBufferLength: 30 });
+          hlsInstance.loadSource(url);
+          hlsInstance.attachMedia(video);
+          video.onloadedmetadata = () => { if(startAt) video.currentTime = startAt; video.play().catch(()=>setIsPlaying(false)); };
+        } 
+        else {
+          video.src = url;
+          video.onloadedmetadata = () => { if(startAt) video.currentTime = startAt; video.play().catch(()=>setIsPlaying(false)); };
+        }
+
+        progressInterval.current = setInterval(() => {
+          if (video && !video.paused && video.duration) {
+            saveProgress(media.id, video.currentTime, video.duration);
+          }
+        }, 2000);
+
+        return () => { if(hlsInstance) hlsInstance.destroy(); clearInterval(progressInterval.current); };
+      }, [media, playerEngine]);
+
+      const togglePlay = (e) => { e.stopPropagation(); const v = videoRef.current; if(v.paused) { v.play(); setIsPlaying(true); } else { v.pause(); setIsPlaying(false); } resetUITimer(); };
+      const skip = (amount, e) => { e.stopPropagation(); videoRef.current.currentTime += amount; resetUITimer(); };
+      const speedUp = () => { videoRef.current.playbackRate = 2.0; setSpeedIndicator(true); };
+      const normalSpeed = () => { videoRef.current.playbackRate = 1.0; setSpeedIndicator(false); };
+
+      return (
+        <div className="fixed inset-0 bg-black z-[100] flex flex-col justify-center items-center overflow-hidden animate-fade-in" 
+             onMouseMove={resetUITimer} onClick={resetUITimer} 
+             onTouchStart={speedUp} onTouchEnd={normalSpeed} onMouseDown={speedUp} onMouseUp={normalSpeed} onMouseLeave={normalSpeed}>
+          
+          <video ref={videoRef} playsInline className="w-full h-full object-contain"></video>
+          
+          {speedIndicator && <div className="absolute top-10 right-10 bg-black/70 text-white px-4 py-2 rounded-full font-bold z-50">2x </div>}
+
+          <div className={`absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/70 transition-opacity duration-300 flex flex-col justify-between p-6 ${showUI || !isPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+            <div className="flex justify-between items-center pointer-events-auto">
+              <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="text-white hover:text-netflix p-2 bg-black/40 rounded-full backdrop-blur-sm"><Icons.Back /></button>
+              <h2 className="text-white font-bold drop-shadow-md text-lg">{media.name}</h2>
+              {episodes.length > 0 ? (
+                <button onClick={(e) => { e.stopPropagation(); setShowEpisodes(!showEpisodes); }} className="text-white p-2 bg-black/40 rounded-full hover:text-netflix"><Icons.List /></button>
+              ) : <div className="w-10"/>}
+            </div>
+
+            <div className="flex justify-center items-center gap-8 pointer-events-auto">
+               {isVod && <button onClick={(e) => skip(-10, e)} className="text-white hover:text-netflix"><Icons.SkipBack /><span className="text-xs font-bold block text-center">-10s</span></button>}
+               <button onClick={togglePlay} className="bg-netflix text-white p-5 rounded-full shadow-[0_0_20px_rgba(229,9,20,0.5)] transform hover:scale-110 transition-all">
+                  {isPlaying ? <Icons.Pause /> : <Icons.Play />}
+               </button>
+               {isVod && <button onClick={(e) => skip(10, e)} className="text-white hover:text-netflix"><Icons.SkipFwd /><span className="text-xs font-bold block text-center">+10s</span></button>}
+            </div>
+            <div className="pb-4"></div>
+          </div>
+
+          {showEpisodes && (
+            <div className="absolute right-0 top-0 bottom-0 w-80 glass-panel border-l border-gray-700 p-4 flex flex-col z-50 pointer-events-auto animate-fade-in" onTouchStart={e=>e.stopPropagation()} onMouseDown={e=>e.stopPropagation()}>
+              <div className="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                <h3 className="font-bold text-white">{t('episodes')}</h3>
+                <button onClick={() => setShowEpisodes(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
+              </div>
+              <div className="flex-1 overflow-y-auto space-y-2 hide-scrollbar">
+                {episodes.map(ep => (
+                  <div key={ep.id} onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent('changeMedia', {detail: ep})); setShowEpisodes(false); }} className={`p-4 rounded-lg cursor-pointer flex items-center gap-3 ${media.id === ep.id ? 'bg-netflix text-white' : 'bg-gray-800/50 hover:bg-gray-700 text-gray-300'}`}>
+                    <Icons.Play />
+                    <span className="text-sm font-bold truncate block">{ep.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    };
+
+    // --- TELA DE DETALHES ---
+    const DetailsScreen = ({ media, playlist, onBack, onPlay, toggleFav, isFav, progress, t }) => {
+      const suggestions = playlist.filter(i => i.type === media.type && i.group === media.group && i.id !== media.id).slice(0, 10);
+      let progPercent = 0;
+      if(progress && progress.duration) progPercent = (progress.time / progress.duration) * 100;
+
+      return (
+        <div className="absolute inset-0 bg-dark z-40 overflow-y-auto animate-fade-in flex flex-col hide-scrollbar">
+          <div className="relative w-full h-[50vh] md:h-[65vh] shrink-0 bg-gray-900">
+            <img src={media.logo} className="w-full h-full object-cover opacity-50" onError={(e) => e.target.style.display='none'} />
+            <div className="absolute inset-0 bg-gradient-to-t from-dark via-dark/40 to-transparent"></div>
+            <div className="absolute inset-0 bg-gradient-to-r from-dark to-transparent"></div>
+            <button onClick={onBack} className="absolute top-6 left-6 text-white bg-black/40 p-3 rounded-full hover:bg-white/20 z-10"><Icons.Back /></button>
+            
+            <div className="absolute bottom-10 left-6 md:left-12 max-w-2xl">
+              <span className="text-netflix text-xs md:text-sm font-black tracking-widest uppercase mb-2 block">{media.group}</span>
+              <h1 className="text-4xl md:text-6xl font-black text-white mb-4 drop-shadow-2xl">{media.name}</h1>
+              
+              <div className="flex items-center gap-4 text-sm text-gray-400 font-bold mb-6">
+                <span className="border border-gray-600 px-1 text-xs">HD</span>
+                <span>{t(media.type === 'Filme' ? 'movies' : 'series')}</span>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <button onClick={() => onPlay(media, progress?.time || 0)} className="bg-white text-black px-8 py-3 rounded font-bold flex items-center gap-2 hover:bg-gray-300">
+                  <Icons.Play /> {progPercent > 2 ? t('continue_watching') : t('watch_now')}
+                </button>
+                <button onClick={() => toggleFav(media)} className={`p-3 rounded-full border-2 ${isFav ? 'border-yellow-400 text-yellow-400' : 'border-gray-500 text-white'}`}>★</button>
+              </div>
+
+              {progPercent > 2 && (
+                <div className="mt-6 w-full max-w-xs bg-gray-700 h-1.5 rounded-full overflow-hidden">
+                  <div className="bg-netflix h-full transition-all duration-500" style={{ width: `${progPercent}%` }}></div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {suggestions.length > 0 && (
+            <div className="px-6 md:px-12 py-12">
+              <h3 className="text-xl font-bold text-white mb-4">{t('similar')}</h3>
+              <div className="flex gap-4 overflow-x-auto hide-scrollbar pb-4">
+                {suggestions.map(sug => (
+                  <div key={sug.id} onClick={() => onPlay(sug, 0)} className="w-32 md:w-40 shrink-0 cursor-pointer hover:scale-105 transition-transform">
+                    <div className="aspect-[2/3] bg-gray-800 rounded-lg overflow-hidden relative">
+                       {sug.logo ? <img src={sug.logo} className="w-full h-full object-cover" /> : <div className="p-2 text-xs text-gray-500 flex items-center justify-center h-full text-center">{sug.name}</div>}
+                    </div>
+                    <p className="text-xs text-white mt-2 truncate font-bold">{sug.name}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // --- TELA DE CONFIGURAÇÕES ---
+    const SettingsScreen = ({ settings, setSettings, onRestart, onUpdate, t }) => {
+      const [tempPin, setTempPin] = useState('');
+
+      const handleSavePin = () => {
+        setSettings({...settings, pin: tempPin});
+        alert(tempPin ? "PIN salvo!" : "PIN removido!");
+        setTempPin('');
+      };
+
+      return (
+        <div className="flex-1 p-8 overflow-y-auto bg-dark text-white">
+          <h2 className="text-3xl font-black mb-8">{t('settings')}</h2>
+          
+          <div className="max-w-2xl flex flex-col gap-8">
+            <div className="bg-darkGray p-6 rounded-xl border border-gray-800">
+              <h3 className="text-netflix font-bold uppercase mb-4 tracking-wider">{t('set_general')}</h3>
+              <div className="flex flex-col gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">{t('player_engine')}</label>
+                  <select value={settings.playerEngine} onChange={(e) => setSettings({...settings, playerEngine: e.target.value})} className="w-full p-3 rounded bg-gray-900 border border-gray-700 outline-none">
+                    <option value="hls">{t('player_hls')}</option>
+                    <option value="native">{t('player_native')}</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-darkGray p-6 rounded-xl border border-gray-800">
+              <h3 className="text-netflix font-bold uppercase mb-4 tracking-wider">{t('set_parental')}</h3>
+              <p className="text-sm text-gray-400 mb-4">Proteja categorias com nomes adultos (+18) usando uma senha de 4 dígitos.</p>
+              
+              {settings.pin ? (
+                <div className="flex items-center justify-between bg-gray-900 p-4 rounded border border-green-500/30">
+                  <span className="font-bold text-green-500">{t('pin_active')} (****)</span>
+                  <button onClick={() => setSettings({...settings, pin: ''})} className="text-red-500 hover:underline text-sm">{t('pin_remove')}</button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input type="password" maxLength="4" placeholder="0000" className="w-24 p-3 text-center rounded bg-gray-900 border border-gray-700 outline-none" value={tempPin} onChange={e => setTempPin(e.target.value.replace(/\D/g, ''))} />
+                  <button onClick={handleSavePin} disabled={tempPin.length < 4} className="bg-white text-black px-4 rounded font-bold disabled:opacity-50">{t('pin_btn')}</button>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-darkGray p-6 rounded-xl border border-gray-800">
+              <h3 className="text-netflix font-bold uppercase mb-4 tracking-wider">{t('set_data')}</h3>
+              <div className="flex flex-col gap-3">
+                <button onClick={onRestart} className="w-full text-left p-4 bg-red-900/20 text-red-500 hover:bg-red-900/40 rounded font-bold border border-red-900/50 transition-colors">{t('restart_list')}</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      );
+    };
+
+    // --- APLICATIVO PRINCIPAL ---
+    const App = () => {
+      const [settings, setSettings] = useState({ lang: 'pt', playerEngine: 'hls', pin: '', epgUrl: '' });
+      const t = (key) => i18n['pt'][key] || key;
+
+      const [screen, setScreen] = useState('login'); 
+      const [playlist, setPlaylist] = useState([]);
+      const [favorites, setFavorites] = useState([]);
+      const [progress, setProgress] = useState({}); 
+      const [toast, setToast] = useState('');
+      
+      const [loginData, setLoginData] = useState({ url: '' });
+      const [isLoading, setIsLoading] = useState(false);
+
+      const [detailsMedia, setDetailsMedia] = useState(null);
+      const [playerMedia, setPlayerMedia] = useState(null);
+      const [startTime, setStartTime] = useState(0);
+      
+      const [selectedCategory, setSelectedCategory] = useState('Todos');
+      const [searchQuery, setSearchQuery] = useState('');
+
+      const [pendingMedia, setPendingMedia] = useState(null);
+      const [pinInput, setPinInput] = useState('');
+
+      const showMessage = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3500); };
+
+      useEffect(() => {
+        const savedSettings = JSON.parse(localStorage.getItem('hitv_settings') || '{}');
+        if (savedSettings.lang) setSettings(prev => ({...prev, ...savedSettings}));
+
+        localforage.getItem('hitv_playlist').then(list => { if (list && list.length > 0) { setPlaylist(list); setScreen('home'); }});
+        setFavorites(JSON.parse(localStorage.getItem('hitv_favs') || '[]'));
+        localforage.getItem('hitv_progress').then(prog => { if (prog) setProgress(prog); });
+
+        const handleMediaChange = (e) => { setPlayerMedia(e.detail); setStartTime(progress[e.detail.id]?.time || 0); };
+        window.addEventListener('changeMedia', handleMediaChange);
+        return () => window.removeEventListener('changeMedia', handleMediaChange);
+      }, []);
+
+      useEffect(() => {
+        localStorage.setItem('hitv_settings', JSON.stringify(settings));
+      }, [settings]);
+
+      const saveProgress = (id, time, duration) => {
+        const newProg = { ...progress, [id]: { time, duration } };
+        setProgress(newProg);
+        localforage.setItem('hitv_progress', newProg);
+      };
+
+      const parseM3U = (content) => {
+        const lines = content.split('\n');
+        const items = []; let currentItem = {};
+        
+        lines.forEach(line => {
+          line = line.trim();
+          if (line.startsWith('#EXTINF:')) {
+            const nameMatch = line.match(/,(.*)$/);
+            const groupMatch = line.match(/group-title="([^"]*)"/);
+            const logoMatch = line.match(/tvg-logo="([^"]*)"/);
+            currentItem = {
+              id: Math.random().toString(36).substr(2, 9),
+              name: nameMatch ? nameMatch[1].trim() : 'Desconhecido',
+              group: groupMatch ? groupMatch[1].trim() : 'Outros',
+              logo: logoMatch ? logoMatch[1] : null,
+              type: 'TV'
+            };
+            const lowerName = currentItem.name.toLowerCase();
+            const lowerGroup = currentItem.group.toLowerCase();
+            if (lowerGroup.includes('filme') || lowerGroup.includes('movie') || lowerGroup.includes('vod')) currentItem.type = 'Filme';
+            if (lowerGroup.includes('série') || lowerGroup.includes('series') || lowerName.match(/s\d+e\d+/)) currentItem.type = 'Série';
+          } else if (line.startsWith('http')) {
+            currentItem.url = line; items.push(currentItem); currentItem = {};
+          }
+        });
+        return items;
+      }
+
+      // FUNÇÃO NOVA: LER ARQUIVO LOCAL
+      const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        setIsLoading(true);
+        const reader = new FileReader();
+        
+        reader.onload = async (event) => {
+          try {
+            const items = parseM3U(event.target.result);
+            setPlaylist(items); 
+            await localforage.setItem('hitv_playlist', items);
+            setScreen('home'); 
+            showMessage(`Lista carregada com sucesso!`);
+          } catch (err) {
+            alert("Erro ao ler o arquivo M3U.");
+          } finally {
+            setIsLoading(false);
+          }
+        };
+        
+        reader.readAsText(file);
+      };
+
+      const fetchPlaylist = async (url) => {
+        const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
+        if (!res.ok) throw new Error('Servidor indisponível.');
+        const content = await res.text();
+        return parseM3U(content);
+      };
+
+      const handleImport = async (e) => {
+        e.preventDefault(); setIsLoading(true);
+        try {
+          const items = await fetchPlaylist(loginData.url);
+          setPlaylist(items); await localforage.setItem('hitv_playlist', items);
+          setScreen('home'); showMessage(`Sucesso!`);
+        } catch (err) { alert("Erro de Conexão. O link M3U está bloqueando acesso externo ou inválido."); } finally { setIsLoading(false); }
+      };
+
+      const handleRestart = () => {
+        localforage.clear();
+        setPlaylist([]);
+        setScreen('login');
+      };
+
+      const attemptPlay = (media, time = 0) => {
+        if (settings.pin && isAdultCategory(media.group)) {
+           setPendingMedia({ media, time });
+        } else {
+           if(media.type === 'TV') setPlayerMedia(media); 
+           else { setDetailsMedia(null); setPlayerMedia(media); setStartTime(time); }
+        }
+      };
+      
+      const attemptDetails = (media) => {
+        if (settings.pin && isAdultCategory(media.group)) {
+           setPendingMedia({ media, time: 0, isDetails: true });
+        } else { setDetailsMedia(media); }
+      };
+
+      const submitPin = () => {
+        if (pinInput === settings.pin) {
+           if(pendingMedia.isDetails) setDetailsMedia(pendingMedia.media);
+           else {
+             if(pendingMedia.media.type === 'TV') setPlayerMedia(pendingMedia.media);
+             else { setDetailsMedia(null); setPlayerMedia(pendingMedia.media); setStartTime(pendingMedia.time); }
+           }
+           setPendingMedia(null); setPinInput('');
+        } else { alert("PIN Incorreto!"); setPinInput(''); }
+      };
+
+      const toggleFav = (item) => {
+        const isFav = favorites.some(f => f.id === item.id);
+        const updated = isFav ? favorites.filter(f => f.id !== item.id) : [item, ...favorites];
+        setFavorites(updated); localStorage.setItem('hitv_favs', JSON.stringify(updated));
+      };
+
+      if (screen === 'login') {
+        return (
+          <div className="flex flex-col items-center justify-center h-screen bg-dark p-6">
+            <h1 className="text-5xl font-black mb-8">HI <span className="text-netflix">TV</span></h1>
+            <div className="w-full max-w-md bg-darkGray p-8 rounded-xl flex flex-col gap-4 shadow-2xl">
+              <h2 className="text-white font-bold mb-4 text-center">Como deseja adicionar sua lista?</h2>
+              
+              <label className={`w-full bg-netflix hover:bg-red-700 text-white font-bold py-4 rounded text-center cursor-pointer transition-colors ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
+                {isLoading ? 'Carregando...' : '📁 Carregar Arquivo .M3U Local'}
+                <input type="file" accept=".m3u,.m3u8" className="hidden" onChange={handleFileUpload} />
+              </label>
+
+              <div className="my-2 flex items-center gap-4">
+                <div className="flex-1 h-px bg-gray-700"></div>
+                <span className="text-gray-500 text-sm font-bold">OU</span>
+                <div className="flex-1 h-px bg-gray-700"></div>
+              </div>
+
+              <form onSubmit={handleImport} className="flex flex-col gap-2">
+                <input type="url" placeholder={t('url_placeholder')} className="p-4 bg-gray-900 border border-gray-700 rounded text-white outline-none focus:border-netflix" value={loginData.url} onChange={e => setLoginData({...loginData, url: e.target.value})} required />
+                <button type="submit" disabled={isLoading} className="w-full bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold py-3 rounded border border-gray-600 disabled:opacity-50">Entrar via Link URL</button>
+              </form>
+
+            </div>
+          </div>
+        );
+      }
+
+      const renderGridScreen = (filterType) => {
+        const filtered = playlist.filter(i => {
+          if (filterType !== 'Todos' && i.type !== filterType) return false;
+          if (searchQuery && !i.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+          if (selectedCategory === 'Favoritos') return favorites.some(f => f.id === i.id);
+          if (selectedCategory === 'Recentes') return progress[i.id] !== undefined;
+          if (selectedCategory !== 'Todos') return i.group === selectedCategory;
+          return true;
+        });
+
+        const cats = ['Todos', 'Favoritos', 'Recentes', ...new Set(playlist.filter(i => filterType === 'Todos' || i.type === filterType).map(i => i.group))];
+
+        return (
+          <div className="flex-1 flex flex-col p-4 md:p-8 overflow-y-auto hide-scrollbar">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+               <h2 className="text-3xl font-black text-white">{filterType === 'Todos' ? t('home') : t(filterType === 'Filme' ? 'movies' : filterType === 'Série' ? 'series' : 'livetv')}</h2>
+               <div className="flex items-center bg-darkGray border border-gray-700 rounded-full px-4 py-2 w-full md:w-64">
+                 <Icons.Search />
+                 <input type="text" placeholder={t('search')} className="bg-transparent border-none outline-none text-sm w-full ml-2 text-white" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} />
+               </div>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto hide-scrollbar mb-8 pb-2">
+               {cats.map(cat => (
+                 <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-5 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-colors shadow-md ${selectedCategory === cat ? 'bg-white text-black' : 'bg-darkGray hover:bg-gray-800 text-gray-400'}`}>
+                    {cat === 'Todos' ? t('all') : cat === 'Favoritos' ? t('favs') : cat === 'Recentes' ? t('recents') : cat}
+                 </button>
+               ))}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 md:gap-4 pb-20">
+               {filtered.map(item => {
+                 const prog = progress[item.id];
+                 const progPercent = prog ? (prog.time / prog.duration) * 100 : 0;
+                 const isProtected = settings.pin && isAdultCategory(item.group);
+                 
+                 return (
+                   <div key={item.id} onClick={() => item.type === 'TV' ? attemptPlay(item) : attemptDetails(item)} className="cursor-pointer group relative">
+                     <div className={`w-full bg-gray-900 rounded-lg overflow-hidden relative border border-transparent group-hover:border-netflix transition-all shadow-lg ${item.type === 'TV' ? 'aspect-video' : 'aspect-[2/3]'}`}>
+                       
+                       {isProtected ? (
+                         <div className="w-full h-full bg-red-900/20 flex flex-col items-center justify-center text-center p-2"><Icons.Lock /><span className="text-[10px] font-bold mt-2 text-gray-400">+18</span></div>
+                       ) : (
+                         item.logo ? <img src={item.logo} className="w-full h-full object-cover" /> : <div className="p-2 text-xs text-gray-600 h-full flex items-center justify-center text-center font-bold">{item.name}</div>
+                       )}
+
+                       {progPercent > 2 && !isProtected && (
+                         <div className="absolute bottom-0 left-0 w-full h-1.5 bg-gray-800">
+                           <div className="h-full bg-netflix" style={{ width: `${progPercent}%` }}></div>
+                         </div>
+                       )}
+                     </div>
+                     <p className="text-xs text-gray-300 mt-2 truncate font-bold">{isProtected ? 'Conteúdo Protegido' : item.name}</p>
+                   </div>
+                 )
+               })}
+            </div>
+          </div>
+        )
+      };
+
+      return (
+        <div className="flex h-screen bg-dark overflow-hidden text-white font-sans relative">
+          
+          <div className="w-16 md:w-20 bg-darkGray flex flex-col items-center py-6 border-r border-gray-800 z-30 shrink-0">
+            <div className="text-xl font-black mb-10"><span className="text-white">H</span><span className="text-netflix">I</span></div>
+            <div className="flex flex-col gap-8 text-gray-500">
+              <button onClick={() => { setScreen('home'); setSelectedCategory('Todos'); setSearchQuery(''); }} className={`flex flex-col items-center gap-1 transition-colors ${screen==='home'?'text-white':'hover:text-gray-300'}`}><Icons.Home /><span className="text-[10px] font-medium mt-1">{t('home')}</span></button>
+              <button onClick={() => { setScreen('Filme'); setSelectedCategory('Todos'); setSearchQuery(''); }} className={`flex flex-col items-center gap-1 transition-colors ${screen==='Filme'?'text-white':'hover:text-gray-300'}`}><Icons.Film /><span className="text-[10px] font-medium mt-1">{t('movies')}</span></button>
+              <button onClick={() => { setScreen('Série'); setSelectedCategory('Todos'); setSearchQuery(''); }} className={`flex flex-col items-center gap-1 transition-colors ${screen==='Série'?'text-white':'hover:text-gray-300'}`}><Icons.Film /><span className="text-[10px] font-medium mt-1">{t('series')}</span></button>
+              <button onClick={() => { setScreen('TV'); setSelectedCategory('Todos'); setSearchQuery(''); }} className={`flex flex-col items-center gap-1 transition-colors ${screen==='TV'?'text-white':'hover:text-gray-300'}`}><Icons.Tv /><span className="text-[10px] font-medium mt-1">{t('livetv')}</span></button>
+            </div>
+            <button onClick={() => setScreen('Settings')} className={`mt-auto transition-colors ${screen==='Settings'?'text-netflix':'text-gray-600 hover:text-white'}`}><Icons.Settings /></button>
+          </div>
+
+          {screen === 'Settings' ? (
+            <SettingsScreen settings={settings} setSettings={setSettings} onRestart={handleRestart} t={t} />
+          ) : (
+            renderGridScreen(screen === 'home' ? 'Todos' : screen)
+          )}
+
+          {detailsMedia && (
+            <DetailsScreen 
+              media={detailsMedia} playlist={playlist} 
+              onBack={() => setDetailsMedia(null)}
+              onPlay={(m, time) => attemptPlay(m, time)}
+              toggleFav={toggleFav} isFav={favorites.some(f => f.id === detailsMedia.id)}
+              progress={progress[detailsMedia.id]} t={t}
+            />
+          )}
+
+          {playerMedia && (
+            <SmartPlayer 
+              media={playerMedia} playlist={playlist} isVod={playerMedia.type !== 'TV'}
+              onClose={() => setPlayerMedia(null)} saveProgress={saveProgress} startAt={startTime} playerEngine={settings.playerEngine} t={t}
+            />
+          )}
+
+          {/* MODAL DE PIN PARA CONTEÚDO ADULTO */}
+          {pendingMedia && (
+            <div className="fixed inset-0 bg-black/90 z-[200] flex items-center justify-center p-4">
+              <div className="bg-darkGray p-8 rounded-xl border border-gray-800 text-center max-w-sm w-full shadow-2xl">
+                <div className="flex justify-center mb-4"><Icons.Lock /></div>
+                <h3 className="text-xl font-bold text-white mb-2">{t('adult_warning')}</h3>
+                <p className="text-gray-400 text-sm mb-6">{t('pin_prompt')}</p>
+                <input type="password" maxLength="4" autoFocus className="w-full text-center p-4 bg-gray-900 border border-gray-700 rounded text-white text-2xl tracking-[1em] mb-6 focus:border-netflix outline-none" value={pinInput} onChange={e => setPinInput(e.target.value.replace(/\D/g, ''))} />
+                <div className="flex gap-4">
+                  <button onClick={() => { setPendingMedia(null); setPinInput(''); }} className="flex-1 p-3 bg-gray-800 hover:bg-gray-700 rounded font-bold">{t('cancel')}</button>
+                  <button onClick={submitPin} disabled={pinInput.length < 4} className="flex-1 p-3 bg-netflix rounded font-bold disabled:opacity-50">{t('confirm')}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Toast msg={toast} />
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
